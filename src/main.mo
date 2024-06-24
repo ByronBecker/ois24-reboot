@@ -1,32 +1,55 @@
 import Principal "mo:base/Principal";
 import Time "mo:base/Time";
-import Timer "mo:base/Timer";
+import Result "mo:base/Result";
+
 shared ({ caller = creator }) actor class UserCanister() = this {
 
-    let owner : Principal = creator;
-    let nanosecondsPerDay = 24 * 60 * 60 * 1_000_000_000;
-    var alive : Bool = true;
-    var latestPing : Time.Time = Time.now();
+    stable let owner : Principal = creator;
+    stable var _isDead : Bool = false;
+    stable var latestPingTime : Time.Time = Time.now();
+    // let survivalLength = 24 * 60 * 60 * 1_000_000_000; // One day
+    let survivalLength = 10 * 1_000_000_000; // Ten seconds
 
-    func _kill() : async () {
-        let now = Time.now();
-        if (now - latestPing > nanosecondsPerDay) {
-            alive := false;
+    public shared ({ caller }) func feed() : async Result.Result<(), { #isDead; #notAuthorized }> {
+        if (caller != owner) {
+            return #err(#notAuthorized);
         };
-    };
-
-    // Timer to reset the alive status every 24 hours
-    let daily = Timer.recurringTimer(#nanoseconds(nanosecondsPerDay), _kill);
-
-    // The idea here is to have a function to call every 24 hours to indicate that you are alive
-    public shared ({ caller }) func dailyPing() : async () {
-        assert (caller == owner);
-        alive := true;
-        latestPing := Time.now();
+        let isDead = calculateOrGetIsDead();
+        if (isDead) {
+            return #err(#isDead);
+        };
+        latestPingTime := Time.now();
+        #ok;
     };
 
     public query func isAlive() : async Bool {
-        return alive;
+        let isDead = calculateOrGetIsDead();
+        return not isDead;
+    };
+
+    public shared ({ caller }) func resurrect() : async Result.Result<(), { #notDead; #notAuthorized }> {
+        if (caller != owner) {
+            return #err(#notAuthorized);
+        };
+        let isDead = calculateOrGetIsDead();
+        if (not isDead) {
+            return #err(#notDead);
+        };
+        _isDead := false;
+        latestPingTime := Time.now();
+        #ok;
+    };
+
+    private func calculateOrGetIsDead() : Bool {
+        if (_isDead) {
+            return true;
+        };
+        // Check to see if it should be dead
+        let pastExpiration = (Time.now() - latestPingTime) > survivalLength;
+        if (pastExpiration) {
+            _isDead := true;
+        };
+        return _isDead;
     };
 
 };

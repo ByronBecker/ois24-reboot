@@ -1,8 +1,8 @@
 {
     "canisters": {
-        "seb" : {
-            "main" : "src/main.mo",
-            "type" : "motoko"
+        "gekctek": {
+            "main": "src/main.mo",
+            "type": "motoko"
         }
     }
 }
