@@ -7,8 +7,7 @@ shared ({ caller = creator }) actor class UserCanister() = this {
     stable let owner : Principal = creator;
     stable var _isDead : Bool = false;
     stable var latestPingTime : Time.Time = Time.now();
-    // let survivalLength = 24 * 60 * 60 * 1_000_000_000; // One day
-    let survivalLength = 10 * 1_000_000_000; // Ten seconds
+    let survivalLength = 24 * 60 * 60 * 1_000_000_000; // One day
 
     public shared ({ caller }) func feed() : async Result.Result<(), { #isDead; #notAuthorized }> {
         if (caller != owner) {
