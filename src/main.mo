@@ -50,7 +50,7 @@ shared ({ caller = deployer }) actor class UserCanister() = this {
     };
 
     // Am I alive?
-    public query func isAlive() : async Bool {
+    public query func reboot_isAlive() : async Bool {
       return alive;
     };
 
