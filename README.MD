@@ -2,7 +2,7 @@
 
 ## Recommendations
 
-- Deploy your user-canister in the following subnet: `jtdsg-3h6gi-hs7o5-z2soi-43w3z-soyl3-ajnp3-ekni5-sw553-5kw67-nqe`
+- Deploy your user-canister in the following subnet: `bkfrj-6k62g-dycql-7h53p-atvkj-zg4to-gaogh-netha-ptybj-ntsgw-rqe`
 
 ## Rules
 1. You are a canister.
