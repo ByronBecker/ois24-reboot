@@ -1,13 +1,15 @@
 import DateTime "mo:datetime/DateTime";
 import Vector "mo:vector";
 
+import Cycles "mo:base/ExperimentalCycles";
 import { trap } "mo:base/Debug";
 import Error "mo:base/Error";
 import { abs } "mo:base/Int";
 import Iter "mo:base/Iter";
+import Result "mo:base/Result";
 import Text "mo:base/Text";
 import Time "mo:base/Time";
-import { recurringTimer } "mo:base/Timer";
+import { recurringTimer; cancelTimer } "mo:base/Timer";
 
 shared ({ caller = deployer }) actor class UserCanister() = this {
 
@@ -18,23 +20,22 @@ shared ({ caller = deployer }) actor class UserCanister() = this {
     stable let nanosPerHour = 60 * 60 * 1_000_000_000;
     stable let nanosPerDay = 24 * nanosPerHour;
     stable var latestPingTime : Time.Time = Time.now();
+    var timerId : ?Nat = null;
 
+    // Log of all ping check-ins
     stable let pingLog = Vector.new<(Int, Text)>();
 
-    // Update latest ping time every 23 hours (1 hour before 24 so don't miss a day)
-    ignore recurringTimer<system>(
-      #nanoseconds(nanosPerDay - (1 * nanosPerHour)),
-      func _updateLatestPingTime() : async () {
-        let now = Time.now();
-        if (now - latestPingTime > nanosPerDay) {
-          alive := false;
-        };
-        latestPingTime := Time.now();
-      },
-    );
+    public type WriteError = {
+        #NotEnoughCycles;
+        #MemoryFull;
+        #NameTooLong;
+        #MoodTooLong;
+        #NotAllowed;
+    };
 
+    // Reboot Game Board canister
     let board = actor ("q3gy3-sqaaa-aaaas-aaajq-cai") : actor {
-      reboot_writeDailyCheck : (name : Text, mood : Text) -> async ();
+      reboot_board_write : (name : Text, mood : Text) -> async Result.Result<(), WriteError>;
     };
 
     public query func getOwner() : async Principal {
@@ -89,6 +90,29 @@ shared ({ caller = deployer }) actor class UserCanister() = this {
       about := newAbout;
     };
 
+    public shared ({ caller }) func startTimer() : async () {
+      if (caller != deployer) trap("Not authorized");
+      if (timerId != null) {
+        trap("Timer already started");
+      };
+      // Update latest ping time every 23 hours (1 hour before 24 so don't miss a day)
+      timerId := ?recurringTimer<system>(
+        #nanoseconds(nanosPerDay - (1 * nanosPerHour)),
+        _updateLatestPingTime
+      );
+    };
+
+    public shared ({ caller }) func stopTimer() : async () {
+      if (caller != deployer) trap("Not authorized");
+      switch(timerId) {
+        case null { trap("Timer not started") };
+        case (?id) {
+          cancelTimer(id);
+          timerId := null;
+        };
+      };
+    };
+
     func _isSleeping() : Bool {
       let now = Time.now();
       // subtract 7 hours to get PST
@@ -122,8 +146,12 @@ shared ({ caller = deployer }) actor class UserCanister() = this {
       };
       try {
         let feeling = _currentFeeling();
-        await board.reboot_writeDailyCheck(name, feeling);
-        Vector.add(pingLog, (now, feeling));
+        // Add 1 billion cycles since the board takes this requirement
+        Cycles.add(1_000_000_000);
+        switch(await board.reboot_board_write(name, feeling)) {
+          case (#ok(_)) Vector.add(pingLog, (now, feeling));
+          case (#err(e)) Vector.add(pingLog, (now, "Error: " # debug_show(e)));
+        };
       } catch (e) {
         Vector.add(pingLog, (now, "Error: " # Error.message(e)));
         throw e;
